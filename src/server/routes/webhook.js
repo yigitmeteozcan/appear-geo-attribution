@@ -76,7 +76,8 @@ async function handleStripePayment(event) {
 
   const visit = getSession(sessionId);
   if (!visit) {
-    console.log(`[appear] Stripe: no session found for ${sessionId}`);
+    // SECURITY: truncate IDs in logs to avoid leaking full session/payment IDs
+    console.log(`[appear] Stripe: no session found for ${sessionId.slice(0, 8)}...`);
     return;
   }
 
@@ -88,7 +89,8 @@ async function handleStripePayment(event) {
     event_type: event.type,
   });
 
-  console.log(`[appear] Attributed Stripe payment ${paymentId} to ${visit.engine} (${sessionId})`);
+  // SECURITY: truncate IDs in logs to avoid leaking full session/payment IDs
+  console.log(`[appear] Attributed Stripe payment ${paymentId.slice(0, 8)}... to ${visit.engine} (${sessionId.slice(0, 8)}...)`);
   return attribution;
 }
 
@@ -161,7 +163,8 @@ function handleLemonSqueezyOrder(payload) {
 
   const visit = getSession(sessionId);
   if (!visit) {
-    console.log(`[appear] LemonSqueezy: no session found for ${sessionId}`);
+    // SECURITY: truncate IDs in logs to avoid leaking full session/payment IDs
+    console.log(`[appear] LemonSqueezy: no session found for ${sessionId.slice(0, 8)}...`);
     return;
   }
 
@@ -177,7 +180,8 @@ function handleLemonSqueezyOrder(payload) {
     event_type: 'order_created',
   });
 
-  console.log(`[appear] Attributed LemonSqueezy order ${paymentId} to ${visit.engine} (${sessionId})`);
+  // SECURITY: truncate IDs in logs to avoid leaking full session/payment IDs
+  console.log(`[appear] Attributed LemonSqueezy order ${paymentId.slice(0, 8)}... to ${visit.engine} (${sessionId.slice(0, 8)}...)`);
   return attribution;
 }
 

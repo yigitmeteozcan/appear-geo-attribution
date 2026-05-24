@@ -93,6 +93,11 @@ const validateEvent = [
 
 function rejectUnknownFields(allowedFields) {
   return (req, res, next) => {
+    // FIX: express.json() parses "null" as JS null, and missing Content-Type
+    // leaves req.body as undefined — both crash Object.keys(). Guard first.
+    if (!req.body || typeof req.body !== 'object') {
+      return res.status(400).json({ error: 'Request body must be a JSON object' });
+    }
     const unknown = Object.keys(req.body).filter((k) => !allowedFields.has(k));
     if (unknown.length > 0) {
       return res.status(400).json({ error: 'Unexpected fields in request' });

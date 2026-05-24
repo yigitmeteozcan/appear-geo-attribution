@@ -21,7 +21,14 @@ function requireApiKey(req, res, next) {
   if (authHeader && authHeader.startsWith('Bearer ')) {
     provided = authHeader.slice(7).trim();
   } else if (req.headers['x-api-key']) {
-    provided = req.headers['x-api-key'].trim();
+    // SECURITY: Express joins duplicate header values with ", " (array coercion).
+    // A comma in a valid API key is impossible — reject early to prevent
+    // an attacker from smuggling two keys in a single header.
+    const rawKey = req.headers['x-api-key'];
+    if (typeof rawKey === 'string' && rawKey.includes(',')) {
+      return res.status(401).json({ error: 'Invalid API key' });
+    }
+    provided = typeof rawKey === 'string' ? rawKey.trim() : null;
   }
 
   if (!provided) {
