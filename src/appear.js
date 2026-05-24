@@ -47,7 +47,8 @@
   function sanitize(val) {
     if (val == null) return '';
     var s = String(val)
-      .replace(/<[^>]*>/g, '')   // strip HTML/script tags
+      .replace(/<[^>]*>/g, '')        // strip HTML/script tags
+      .replace(/javascript:/gi, '')   // strip javascript: URIs
       .replace(/[^\x20-\x7E -￿]/g, '') // printable only
       .trim()
       .slice(0, MAX_STRING_LEN);

@@ -64,7 +64,11 @@ function initStore() {
   setInterval(purgeExpired, 10 * 60 * 1000).unref();
 }
 
+const MAX_SESSIONS = 100_000;
+
 function saveSession(sessionId, visitData) {
+  if (sessions.size >= MAX_SESSIONS && !sessions.has(sessionId)) return;
+
   const now = Date.now();
   const expiresAt = now + SESSION_TTL_MS;
 

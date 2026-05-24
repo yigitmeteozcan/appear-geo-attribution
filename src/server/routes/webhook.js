@@ -98,7 +98,7 @@ async function handleStripePayment(event) {
  * POST /lemonsqueezy/webhook
  * Verifies LemonSqueezy HMAC-SHA256 signature and processes order events.
  */
-router.post('/lemonsqueezy/webhook', webhookLimiter, express.json({ limit: '10kb' }), (req, res) => {
+router.post('/lemonsqueezy/webhook', webhookLimiter, (req, res) => {
   const secret = process.env.LEMONSQUEEZY_WEBHOOK_SECRET;
   if (!secret) {
     console.error('[appear] LEMONSQUEEZY_WEBHOOK_SECRET not set');
@@ -110,15 +110,13 @@ router.post('/lemonsqueezy/webhook', webhookLimiter, express.json({ limit: '10kb
     return res.status(400).json({ error: 'Missing x-signature header' });
   }
 
-  // Verify HMAC-SHA256 signature
-  let rawBody;
-  try {
-    rawBody = JSON.stringify(req.body);
-  } catch (_) {
-    return res.status(400).json({ error: 'Invalid JSON' });
+  // req.body is a raw Buffer from express.raw() mounted in index.js —
+  // HMAC must be computed over the original bytes, not a re-serialized object
+  if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+    return res.status(400).json({ error: 'Empty or malformed body' });
   }
 
-  const expected = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+  const expected = crypto.createHmac('sha256', secret).update(req.body).digest('hex');
   const sigBuf = Buffer.from(sig, 'hex');
   const expectedBuf = Buffer.from(expected, 'hex');
 
@@ -139,10 +137,11 @@ router.post('/lemonsqueezy/webhook', webhookLimiter, express.json({ limit: '10kb
   }
 
   try {
+    const payload = JSON.parse(req.body.toString('utf8'));
     const eventName = req.headers['x-event-name'];
 
     if (eventName === 'order_created') {
-      handleLemonSqueezyOrder(req.body);
+      handleLemonSqueezyOrder(payload);
     }
 
     return res.json({ received: true });

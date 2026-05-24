@@ -48,10 +48,14 @@ app.use(helmet());
 
 // ─── Body parsing ─────────────────────────────────────────────────────────────
 
-// Stripe requires the raw body for signature verification — mount BEFORE json()
+// Stripe and LemonSqueezy both require the raw body for signature verification — mount BEFORE json()
 app.use(
   '/stripe/webhook',
   express.raw({ type: 'application/json', limit: '1mb' })
+);
+app.use(
+  '/lemonsqueezy/webhook',
+  express.raw({ type: 'application/json', limit: '10kb' })
 );
 
 // All other routes get JSON parsing with a tight limit
@@ -82,31 +86,30 @@ app.use((err, req, res, _next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
-// ─── Start ────────────────────────────────────────────────────────────────────
+// ─── Start (only when run directly, not when require()d by tests) ────────────
 
 initStore();
 
-const server = app.listen(PORT, () => {
-  console.log(`[appear] Server listening on port ${PORT}`);
-});
-
-// ─── Graceful shutdown ────────────────────────────────────────────────────────
-
-function shutdown(signal) {
-  console.log(`[appear] ${signal} received, shutting down gracefully`);
-  server.close(() => {
-    console.log('[appear] HTTP server closed');
-    process.exit(0);
+if (require.main === module) {
+  const server = app.listen(PORT, () => {
+    console.log(`[appear] Server listening on port ${PORT}`);
   });
 
-  // Force exit after 10 seconds
-  setTimeout(() => {
-    console.error('[appear] Forced shutdown after timeout');
-    process.exit(1);
-  }, 10_000).unref();
-}
+  function shutdown(signal) {
+    console.log(`[appear] ${signal} received, shutting down gracefully`);
+    server.close(() => {
+      console.log('[appear] HTTP server closed');
+      process.exit(0);
+    });
 
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT', () => shutdown('SIGINT'));
+    setTimeout(() => {
+      console.error('[appear] Forced shutdown after timeout');
+      process.exit(1);
+    }, 10_000).unref();
+  }
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
+}
 
 module.exports = app; // for testing
