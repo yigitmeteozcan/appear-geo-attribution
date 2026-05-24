@@ -118,7 +118,9 @@
 
   function detectEngine(referrer, utmSource) {
     // 1. Check utm_source first (explicit signal)
-    if (utmSource) {
+    // SECURITY: guard against non-string utmSource (e.g. object/array from attacker-controlled input)
+    // to prevent TypeError: utmSource.toLowerCase is not a function
+    if (utmSource && typeof utmSource === 'string') {
       var key = utmSource.toLowerCase().replace(/[^a-z0-9.]/g, '');
       if (UTM_ENGINE_MAP[key]) {
         return { engine: UTM_ENGINE_MAP[key], source: 'utm' };
@@ -166,6 +168,8 @@
       events.unshift(event);
       sessionStorage.setItem(EVENTS_KEY, JSON.stringify(events.slice(0, maxStored)));
     } catch (e) {}
+    // NOTE: QuotaExceededError is caught silently here — detection still works,
+    // the event just won't be persisted to sessionStorage.
   }
 
   // --- Main Appear object ---
@@ -225,6 +229,8 @@
     /**
      * Detect AI engine from current page context.
      * Returns detection object or null.
+     * NOTE: location.href is wrapped in safeGet — if window.location is overridden,
+     * the error is caught and an empty string is returned safely.
      */
     detect: function () {
       try {
@@ -296,6 +302,8 @@
 
       _log('log', 'AI visit detected: ' + detection.engine + ' via ' + detection.source);
 
+      // NOTE: global pollution — only window.Appear is set; the hex() helper
+      // inside generateId() is function-scoped and not exposed globally.
       fetch(_config.webhookUrl, {
         method: 'POST',
         headers: {
@@ -308,6 +316,8 @@
           _log('warn', 'Event send failed: ' + res.status);
         }
       }).catch(function (err) {
+        // Network errors (blocked fetch, CSP, offline) are swallowed silently.
+        // The detection object is already persisted to sessionStorage before this point.
         _log('warn', 'Event send error: ' + err.message);
       });
     } catch (e) {
