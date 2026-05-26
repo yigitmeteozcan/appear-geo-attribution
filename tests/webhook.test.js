@@ -102,7 +102,7 @@ describe('Constant-time API key comparison', () => {
   });
 });
 
-// ─── In-memory store tests ─────────────────────────────────────────────────────
+// ─── In-memory store tests ─────────────────────────────────────────────────────────
 
 describe('In-memory store', () => {
   let store;
@@ -181,15 +181,6 @@ describe('In-memory store', () => {
     const before = store.getSession('expire-test-session');
     assert.ok(before, 'session should exist before expiry');
 
-    // Override _expires_at to the past to simulate expiry
-    // The store keeps a reference to the object in the Map, so we can't directly
-    // access it. Instead, re-require the store internals to manipulate the Map.
-    // We'll mock by manipulating the session's _expires_at via saveSession
-    // with an already-expired timestamp in the data (the check is on _expires_at property).
-    // The cleanest way: save with a backdated _expires_at by directly accessing store internals.
-    // Since the store doesn't expose the Map, we'll use a side-channel:
-    // save a fresh session and then expire it via the internal TTL constant (24h).
-    // For testing, simulate by patching Date.now temporarily.
     const realDateNow = Date.now;
     // Move time forward 25 hours so the session is expired
     Date.now = () => realDateNow() + 25 * 60 * 60 * 1000;
@@ -228,10 +219,6 @@ describe('In-memory store', () => {
   });
 
   test('saveSession at MAX_SESSIONS cap silently drops new session (does not throw)', () => {
-    // We cannot fill 100k slots in a unit test, but we can verify the guard logic
-    // by checking the behavior description: saveSession returns early when capped.
-    // We test the guard condition indirectly by confirming the function does not throw
-    // for any input, even at high volume (1000 unique sessions).
     assert.doesNotThrow(() => {
       for (let i = 0; i < 1000; i++) {
         store.saveSession(`bulk-session-${i}`, { engine: 'chatgpt', source: 'utm' });
@@ -240,7 +227,7 @@ describe('In-memory store', () => {
   });
 });
 
-// ─── HTTP integration tests ─────────────────────────────────────────────────────
+// ─── HTTP integration tests ─────────────────────────────────────────────────────────────────────────────────
 
 describe('HTTP endpoints', () => {
   let server;
@@ -263,7 +250,7 @@ describe('HTTP endpoints', () => {
     await new Promise((resolve) => server.close(resolve));
   });
 
-  // ── /health ──────────────────────────────────────────────────────────────────
+  // ── /health ──────────────────────────────────────────────────────────────────────────────────
 
   test('GET /health returns 200', async () => {
     const res = await fetch(`${baseUrl}/health`);
@@ -279,7 +266,7 @@ describe('HTTP endpoints', () => {
     assert.equal(body.env, undefined, 'health must not expose env vars');
   });
 
-  // ── /appear/stats ──────────────────────────────────────────────────────────────
+  // ── /appear/stats ──────────────────────────────────────────────────────────────────────────────────
 
   test('GET /appear/stats without auth returns 401', async () => {
     const res = await fetch(`${baseUrl}/appear/stats`);
@@ -325,7 +312,7 @@ describe('HTTP endpoints', () => {
     assert.equal(res.status, 200);
   });
 
-  // ── /appear/event ──────────────────────────────────────────────────────────────
+  // ── /appear/event ──────────────────────────────────────────────────────────────────────────────────
 
   test('POST /appear/event with valid payload returns 202', async () => {
     const payload = {
@@ -479,13 +466,6 @@ describe('HTTP endpoints', () => {
   });
 
   test('POST /appear/event rate limit: 61st request returns 429', async () => {
-    // The event limiter allows 60 requests/min per IP
-    // We need to ensure we're using a distinct IP-like scenario.
-    // In tests on loopback, all requests come from 127.0.0.1, so the limiter
-    // will enforce across ALL event test calls above. We send 61 requests
-    // in rapid succession and assert the last one gets 429.
-    // Note: the previous tests in this suite may have already consumed some slots.
-    // To isolate, we use a fresh server for rate limit testing.
     const app2 = require('../src/server/index.js');
     const server2 = http.createServer(app2);
     await new Promise((resolve) => server2.listen(0, '127.0.0.1', resolve));
@@ -514,7 +494,7 @@ describe('HTTP endpoints', () => {
     assert.equal(lastStatus, 429, '61st request should be rate-limited to 429');
   });
 
-  // ── /stripe/webhook ──────────────────────────────────────────────────────────────
+  // ── /stripe/webhook ──────────────────────────────────────────────────────────────────────────────────
 
   test('POST /stripe/webhook without signature returns 400', async () => {
     process.env.STRIPE_WEBHOOK_SECRET = 'whsec_test';
@@ -546,7 +526,6 @@ describe('HTTP endpoints', () => {
   });
 
   test('POST /stripe/webhook valid checkout.session.completed saves attribution', async () => {
-    // Build a properly-signed Stripe webhook event using the stripe library test helpers
     const Stripe = require('stripe');
     const stripeSecret = 'whsec_stripe_integration_test';
     process.env.STRIPE_WEBHOOK_SECRET = stripeSecret;
@@ -554,7 +533,6 @@ describe('HTTP endpoints', () => {
 
     const stripe = new Stripe('sk_test_fake', { apiVersion: '2023-10-16' });
 
-    // First, save a session so the webhook can find it
     const store = require('../src/server/store');
     const sessionId = 'stripe-test-session-checkout-001';
     store.saveSession(sessionId, {
@@ -583,7 +561,6 @@ describe('HTTP endpoints', () => {
 
     const payloadString = JSON.stringify(payload);
     const timestamp = Math.floor(Date.now() / 1000);
-    // Manually construct Stripe signature
     const signedPayload = `${timestamp}.${payloadString}`;
     const signature = crypto
       .createHmac('sha256', stripeSecret)
@@ -604,7 +581,6 @@ describe('HTTP endpoints', () => {
     const body = await res.json();
     assert.equal(body.received, true);
 
-    // Verify the attribution was saved
     const statsRes = await fetch(`${baseUrl}/appear/stats`, {
       headers: { 'x-api-key': API_KEY },
     });
@@ -679,7 +655,7 @@ describe('HTTP endpoints', () => {
         object: {
           id: 'cs_test_nometa',
           object: 'checkout.session',
-          metadata: {},  // no appear_session_id
+          metadata: {},
           amount_total: 1000,
           currency: 'usd',
         },
@@ -791,7 +767,6 @@ describe('HTTP endpoints', () => {
 
     const dedupPaymentId = 'cs_dedup_stripe_001';
 
-    // Send the same webhook twice
     for (let i = 0; i < 2; i++) {
       const { payloadString, stripeHeader } = buildRequest(dedupPaymentId);
       await fetch(`${baseUrl}/stripe/webhook`, {
@@ -809,14 +784,13 @@ describe('HTTP endpoints', () => {
     });
     const stats = await statsRes.json();
 
-    // Find entries for gemini engine in recent_attributions
     const dedupEntries = stats.recent_attributions.filter(
       (a) => a.payment_id === dedupPaymentId
     );
     assert.equal(dedupEntries.length, 1, 'duplicate webhook delivery must not double-count');
   });
 
-  // ── /lemonsqueezy/webhook ────────────────────────────────────────────────────────────
+  // ── /lemonsqueezy/webhook ────────────────────────────────────────────────────────────────────────────────
 
   test('POST /lemonsqueezy/webhook without signature returns 400', async () => {
     process.env.LEMONSQUEEZY_WEBHOOK_SECRET = 'test-ls-secret';
@@ -895,12 +869,63 @@ describe('HTTP endpoints', () => {
     const body = await res.json();
     assert.equal(body.received, true);
 
-    // Verify attribution was saved
     const statsRes = await fetch(`${baseUrl}/appear/stats`, {
       headers: { 'x-api-key': API_KEY },
     });
     const stats = await statsRes.json();
     assert.ok(stats.total_attributions >= 1, 'attribution should have been saved');
+  });
+
+  test('POST /lemonsqueezy/webhook 65-char hex signature (odd-length bypass) returns 400', async () => {
+    const lsSecret = 'test-ls-secret-sig-length';
+    process.env.LEMONSQUEEZY_WEBHOOK_SECRET = lsSecret;
+
+    const bodyStr = JSON.stringify({ meta: {}, data: {} });
+    const validSig = crypto.createHmac('sha256', lsSecret).update(bodyStr).digest('hex');
+    // Append one hex digit — Buffer.from would produce same 32 bytes, but our
+    // string-length guard must reject it before Buffer.from is ever called.
+    const oddSig = validSig + '0';
+    assert.equal(oddSig.length, 65);
+
+    const res = await fetch(`${baseUrl}/lemonsqueezy/webhook`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-signature': oddSig,
+        'x-event-name': 'order_created',
+      },
+      body: bodyStr,
+    });
+    assert.equal(res.status, 400);
+  });
+
+  test('POST /lemonsqueezy/webhook numeric appear_session_id returns 200 (no 500)', async () => {
+    const lsSecret = 'test-ls-secret-numeric-sid';
+    process.env.LEMONSQUEEZY_WEBHOOK_SECRET = lsSecret;
+
+    const payload = {
+      meta: {
+        event_name: 'order_created',
+        custom_data: { appear_session_id: 12345 }, // numeric — must not throw
+      },
+      data: { id: 'ls-order-numeric', attributes: { total: 500, currency: 'usd' } },
+    };
+    const bodyStr = JSON.stringify(payload);
+    const sig = crypto.createHmac('sha256', lsSecret).update(bodyStr).digest('hex');
+
+    const res = await fetch(`${baseUrl}/lemonsqueezy/webhook`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-signature': sig,
+        'x-event-name': 'order_created',
+      },
+      body: bodyStr,
+    });
+    // Should return 200 received:true, not 500
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.received, true);
   });
 
   test('POST /lemonsqueezy/webhook valid signature but no appear_session_id returns received:true', async () => {
@@ -910,7 +935,7 @@ describe('HTTP endpoints', () => {
     const payload = {
       meta: {
         event_name: 'order_created',
-        custom_data: {},  // no appear_session_id
+        custom_data: {},
       },
       data: {
         id: 'ls-order-nometadata',
@@ -936,7 +961,7 @@ describe('HTTP endpoints', () => {
     assert.equal(body.received, true);
   });
 
-  // ── 404 ──────────────────────────────────────────────────────────────────────
+  // ── 404 ──────────────────────────────────────────────────────────────────────────────────
 
   test('unknown route returns 404', async () => {
     const res = await fetch(`${baseUrl}/not-a-real-route`);
@@ -944,18 +969,12 @@ describe('HTTP endpoints', () => {
   });
 });
 
-// ─── Startup / config tests ─────────────────────────────────────────────────────
+// ─── Startup / config tests ─────────────────────────────────────────────────────────────────────────────────
 
 describe('Startup and config', () => {
   test('Server starts without STRIPE_SECRET_KEY (lazy load — no crash)', () => {
-    // Prove the server module can be required without STRIPE_SECRET_KEY set
-    // (Stripe is lazy-required inside the webhook route handler)
     delete process.env.STRIPE_SECRET_KEY;
     assert.doesNotThrow(() => {
-      // Re-require the store (already required above, this is a no-op for store)
-      // The key behavior: the server index.js exports app without requiring STRIPE_SECRET_KEY
-      // The webhook handler only loads stripe when a request arrives.
-      // We verify this by ensuring require('../src/server/index.js') does not throw.
       require('../src/server/index.js');
     });
   });
@@ -968,8 +987,6 @@ describe('Startup and config', () => {
   });
 
   test('Server crashes (process.exit) if API_KEY is missing', () => {
-    // Use spawnSync so result.status is the raw exit code — execFile's err.code
-    // conflates system errors (ENOENT) with process exit codes, making it unreliable.
     const { spawnSync } = require('node:child_process');
     const env = { ...process.env };
     delete env.API_KEY;

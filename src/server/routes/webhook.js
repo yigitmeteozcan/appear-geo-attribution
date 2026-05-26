@@ -7,7 +7,7 @@ const { getSession, saveAttribution } = require('../store');
 
 const router = express.Router();
 
-// ─── Stripe ───────────────────────────────────────────────────────────────────
+// ─── Stripe ─────────────────────────────────────────────────────────────────────────────────
 
 /**
  * POST /stripe/webhook
@@ -94,7 +94,7 @@ async function handleStripePayment(event) {
   return attribution;
 }
 
-// ─── LemonSqueezy ─────────────────────────────────────────────────────────────
+// ─── LemonSqueezy ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * POST /lemonsqueezy/webhook
@@ -110,6 +110,14 @@ router.post('/lemonsqueezy/webhook', webhookLimiter, (req, res) => {
   const sig = req.headers['x-signature'];
   if (!sig) {
     return res.status(400).json({ error: 'Missing x-signature header' });
+  }
+
+  // SECURITY: Buffer.from(sig, 'hex') silently truncates odd-length hex strings
+  // to floor(len/2) bytes — a 65-char string produces the same 32-byte buffer as
+  // a valid 64-char signature, bypassing the byte-length guard below.
+  // Reject any signature that isn't exactly 64 hex chars (SHA-256 output).
+  if (typeof sig !== 'string' || !/^[0-9a-fA-F]{64}$/.test(sig)) {
+    return res.status(400).json({ error: 'Invalid signature' });
   }
 
   // req.body is a raw Buffer from express.raw() mounted in index.js —
@@ -159,7 +167,9 @@ function handleLemonSqueezyOrder(payload) {
   const attributes = data.attributes || {};
 
   const sessionId = meta.custom_data && meta.custom_data.appear_session_id;
-  if (!sessionId) return;
+  // Guard against non-string values (e.g. numeric appear_session_id) — calling
+  // .slice() on a number throws TypeError and causes a 500 response.
+  if (!sessionId || typeof sessionId !== 'string') return;
 
   const visit = getSession(sessionId);
   if (!visit) {
